@@ -28,13 +28,16 @@ class DeviceSearchProvider(object):
 
     def __init__(self, dmd):
         self._dmd = dmd
-    
 
-    def getSearchResults(self, parsedQuery,
-                         sorter=None, unrestricted=False):
+
+    def getCategoryCounts(self, parsedQuery, filterFn=None):
+        return self.getSearchResults(parsedQuery, countOnly=True, filterFn=filterFn)
+
+    def getSearchResults(self, parsedQuery, sorter=None, category=None, countOnly=False,
+                         unrestricted=False, filterFn=None):
         """
         Queries the catalog.  Searches the searchKeywords index
-        using *keyword1* AND *keyword2* AND so on. 
+        using *keyword1* AND *keyword2* AND so on.
         If there are preferred categories, find maxResults # of instances
         before searching other categories.
 
@@ -45,19 +48,10 @@ class DeviceSearchProvider(object):
 
         if not keywords:
             return
-        
-        results = self.doMySearch( keywords, unrestricted )
-
-        if sorter is not None:
-            results = sorter.limitSort(results)
-
-        return results
-
-    def doMySearch( self, keywords, unrestricted=False ):
 
         def listMatchGlob(op, index, list):
             return op(*[ MatchGlob(index, '*%s*' % i ) for i in list ])
-        
+
         full_query = Eq('objectImplements', 'Products.ZenModel.Device.Device')
         kw_query = listMatchGlob(And, 'searchKeywords', keywords)
         full_query = full_query & kw_query
@@ -68,12 +62,22 @@ class DeviceSearchProvider(object):
             roles = In('allowedRolesAndUsers', allowedRolesAndGroups(self._dmd))
             querySet = [full_query, roles]
             querySet = And(*querySet)
-            
+
         catalogItems = self._dmd.global_catalog.evalAdvancedQuery(querySet)
         brainResults = [DeviceSearchResult(catalogItem)
                         for catalogItem in catalogItems
                         if catalogItem.searchExcerpt is not None]
-        return brainResults
+        if filterFn:
+            brainResults = filter(filterFn, brainResults)
+
+        if countOnly:
+            return dict(Device=len(brainResults))
+        results = brainResults
+
+        if sorter is not None:
+            results = sorter.limitSort(results)
+
+        return results
 
     def getQuickSearchResults(self, parsedQuery, maxResults=None):
         """
@@ -105,11 +109,11 @@ class DeviceSearchResult(object):
         return self._brain.searchExcerpt
 
     iconTemplate = '<img src="%s"/>'
-    
+
     @property
     def icon(self):
         return self.iconTemplate % self._brain.searchIcon
-    
+
     @property
     def popout(self):
         return False

@@ -18,5 +18,5 @@
            xmlns:browser="http://namespaces.zope.org/browser">
 
   <include package=".device"/>
-  
+
 </configure>
