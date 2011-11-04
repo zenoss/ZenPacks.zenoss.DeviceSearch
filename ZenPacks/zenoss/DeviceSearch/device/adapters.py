@@ -14,6 +14,7 @@ from zope.component import adapts
 from zope.interface import implements
 from Products.AdvancedQuery import MatchGlob, And, Or, Eq, In, RankByQueries_Max
 from Products.ZCatalog.interfaces import ICatalogBrain
+from Products.Zuul.tree import PermissionedCatalogTool
 from Products.ZenModel.DataRoot import DataRoot
 from Products.Zuul.utils import allowedRolesAndGroups
 from Products.Zuul.search import ISearchProvider
@@ -51,10 +52,11 @@ class DeviceSearchProvider(object):
 
         def listMatchGlob(op, index, list):
             return op(*[ MatchGlob(index, '*%s*' % i ) for i in list ])
-
-        full_query = Eq('objectImplements', 'Products.ZenModel.Device.Device')
-        kw_query = listMatchGlob(And, 'searchKeywords', keywords)
-        full_query = full_query & kw_query
+        dmd = self._dmd
+        kw_query = Or(listMatchGlob(And, 'titleOrId', keywords),
+                      listMatchGlob(And, 'getDeviceIp', keywords))
+        full_query = kw_query
+        cat = PermissionedCatalogTool(dmd, dmd.Devices.deviceSearch)
 
         querySet = full_query
         if not unrestricted:
@@ -63,10 +65,9 @@ class DeviceSearchProvider(object):
             querySet = [full_query, roles]
             querySet = And(*querySet)
 
-        catalogItems = self._dmd.global_catalog.evalAdvancedQuery(querySet)
+        catalogItems = cat.catalog.evalAdvancedQuery(querySet)
         brainResults = [DeviceSearchResult(catalogItem)
-                        for catalogItem in catalogItems
-                        if catalogItem.searchExcerpt is not None]
+                        for catalogItem in catalogItems]
         if filterFn:
             brainResults = filter(filterFn, brainResults)
 
@@ -106,13 +107,14 @@ class DeviceSearchResult(object):
 
     @property
     def excerpt(self):
-        return self._brain.searchExcerpt
+        return self._brain.id
 
-    iconTemplate = '<img src="%s"/>'
+    iconTemplate = '<img src="/zport/dmd/img/icons/noicon.png"/>'
 
     @property
     def icon(self):
-        return self.iconTemplate % self._brain.searchIcon
+        # show no icon so we don't have to wake up the object
+        return self.iconTemplate
 
     @property
     def popout(self):
