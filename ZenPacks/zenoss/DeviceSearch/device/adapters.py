@@ -59,11 +59,6 @@ class DeviceSearchProvider(object):
         cat = PermissionedCatalogTool(dmd, dmd.Devices.deviceSearch)
 
         querySet = full_query
-        if not unrestricted:
-            # take permissions into account
-            roles = In('allowedRolesAndUsers', allowedRolesAndGroups(self._dmd))
-            querySet = [full_query, roles]
-            querySet = And(*querySet)
 
         catalogItems = cat.catalog.evalAdvancedQuery(querySet)
         brainResults = [DeviceSearchResult(catalogItem)
