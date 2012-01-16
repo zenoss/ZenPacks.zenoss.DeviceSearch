@@ -12,13 +12,12 @@
 ###########################################################################
 from zope.component import adapts
 from zope.interface import implements
-from Products.AdvancedQuery import MatchGlob, And, Or, Eq, In, RankByQueries_Max
-from Products.ZCatalog.interfaces import ICatalogBrain
-from Products.Zuul.tree import PermissionedCatalogTool
+from Products.AdvancedQuery import MatchGlob, And, Or, RankByQueries_Sum
 from Products.ZenModel.DataRoot import DataRoot
-from Products.Zuul.utils import allowedRolesAndGroups
 from Products.Zuul.search import ISearchProvider
 from Products.Zuul.search import ISearchResult
+from Products.Zuul import checkPermission
+
 
 class DeviceSearchProvider(object):
     """
@@ -55,14 +54,16 @@ class DeviceSearchProvider(object):
         dmd = self._dmd
         kw_query = Or(listMatchGlob(And, 'titleOrId', keywords),
                       listMatchGlob(And, 'getDeviceIp', keywords))
+        # Rank devices whose name match the query higher than other stuff
+        ranker = RankByQueries_Sum( (listMatchGlob(Or, 'titleOrId', keywords), 10), )
         full_query = kw_query
-        cat = PermissionedCatalogTool(dmd, dmd.Devices.deviceSearch)
+        cat = dmd.Devices.deviceSearch
 
         querySet = full_query
 
-        catalogItems = cat.catalog.evalAdvancedQuery(querySet)
+        catalogItems = cat.evalAdvancedQuery(querySet,  (ranker,) )
         brainResults = [DeviceSearchResult(catalogItem)
-                        for catalogItem in catalogItems]
+                        for catalogItem in catalogItems if checkPermission("View", catalogItem.getObject())]
         if filterFn:
             brainResults = filter(filterFn, brainResults)
 

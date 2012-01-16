@@ -16,8 +16,11 @@
 <configure xmlns="http://namespaces.zope.org/zope">
 
     <subscriber provides="Products.Zuul.search.ISearchProvider"
-        for="Products.ZenModel.DataRoot.DataRoot"
-        factory=".adapters.DeviceSearchProvider"
-        />
+                xmlns:zcml="http://namespaces.zope.org/zcml"
+                zcml:condition="not-installed ZenPacks.zenoss.AdvancedSearch"
+                for="Products.ZenModel.DataRoot.DataRoot"
+                factory=".adapters.DeviceSearchProvider"
+            />
+
 
 </configure>
