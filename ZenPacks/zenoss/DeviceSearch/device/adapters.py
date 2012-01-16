@@ -105,7 +105,9 @@ class DeviceSearchResult(object):
     def excerpt(self):
         return self._brain.id
 
-    iconTemplate = '<img src="/zport/dmd/img/icons/noicon.png"/>'
+    @property
+    def iconTemplate(self):
+        return "<img src='%s' />" % self._brain.getObject().zIcon
 
     @property
     def icon(self):
