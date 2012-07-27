@@ -8,7 +8,7 @@ AUTHOR = "Zenoss"
 LICENSE = ""
 NAMESPACE_PACKAGES = ['ZenPacks', 'ZenPacks.zenoss']
 PACKAGES = ['ZenPacks', 'ZenPacks.zenoss', 'ZenPacks.zenoss.DeviceSearch']
-INSTALL_REQUIRES = []
+INSTALL_REQUIRES = ['Zenoss >= 4.1.0']
 COMPAT_ZENOSS_VERS = ">=4.1.0"
 PREV_ZENPACK_NAME = ""
 # STOP_REPLACEMENTS
