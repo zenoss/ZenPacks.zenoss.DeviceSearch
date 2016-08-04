@@ -32,7 +32,7 @@ class DeviceSearchProvider(object):
         return self.getSearchResults(parsedQuery, countOnly=True, filterFn=filterFn)
 
     def getSearchResults(self, parsedQuery, sorter=None, category=None, countOnly=False,
-                         unrestricted=False, filterFn=None):
+                         unrestricted=False, filterFn=None, maxResults=None):
         """
         Queries the catalog.  Searches the searchKeywords index
         using *keyword1* AND *keyword2* AND so on.
