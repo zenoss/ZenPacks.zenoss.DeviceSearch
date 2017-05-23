@@ -27,7 +27,6 @@ class DeviceSearchProvider(object):
     def __init__(self, dmd):
         self._dmd = dmd
 
-
     def getCategoryCounts(self, parsedQuery, filterFn=None):
         return self.getSearchResults(parsedQuery, countOnly=True, filterFn=filterFn)
 
@@ -48,20 +47,38 @@ class DeviceSearchProvider(object):
             return
 
         def listMatchGlob(op, index, list):
-            return op(*[ MatchGlob(index, '*%s*' % i ) for i in list ])
+            return op(*[MatchGlob(index, '*%s*' % i) for i in list])
+
         dmd = self._dmd
-        kw_query = Or(listMatchGlob(And, 'titleOrId', keywords),
-                      listMatchGlob(And, 'getDeviceIp', keywords))
-        # Rank devices whose name match the query higher than other stuff
-        ranker = RankByQueries_Sum( (listMatchGlob(Or, 'titleOrId', keywords), 10), )
-        full_query = kw_query
-        cat = dmd.Devices.deviceSearch
 
-        querySet = full_query
+        try:
+            from Products.Zuul.catalog.interfaces import IModelCatalogTool
 
-        catalogItems = cat.evalAdvancedQuery(querySet,  (ranker,) )
-        brainResults = [DeviceSearchResult(catalogItem)
-                        for catalogItem in catalogItems if checkPermission("View", catalogItem.getObject())]
+            kw_query = Or(listMatchGlob(And, 'name', keywords),
+                          listMatchGlob(And, 'text_ipAddress', keywords))
+
+            # Rank devices whose name match the query higher than other stuff
+            # TODO: Figure out how to expose Lucene boosts
+            # For now we just or the boost query in with the original query to boost those results
+            ranker = listMatchGlob(Or, 'name', keywords)
+            full_query = Or(kw_query, ranker)
+            cat = IModelCatalogTool(dmd).devices
+            # Set orderby to None so that modelindex will rank by score
+            catalogItems = cat.search(query=full_query, orderby=None, filterPermissions=True)
+            brainResults = [DeviceSearchResult(catalogItem) for catalogItem in catalogItems]
+        except ImportError:
+            kw_query = Or(listMatchGlob(And, 'titleOrId', keywords),
+                          listMatchGlob(And, 'getDeviceIp', keywords))
+
+            # Rank devices whose name match the query higher than other stuff
+            ranker = RankByQueries_Sum((listMatchGlob(Or, 'titleOrId', keywords), 10), )
+            full_query = kw_query
+            cat = dmd.Devices.deviceSearch
+            querySet = full_query
+            catalogItems = cat.evalAdvancedQuery(querySet, (ranker,))
+            brainResults = [DeviceSearchResult(catalogItem)
+                            for catalogItem in catalogItems if checkPermission("View", catalogItem.getObject())]
+
         if filterFn:
             brainResults = filter(filterFn, brainResults)
 
@@ -78,7 +95,7 @@ class DeviceSearchProvider(object):
         """
         Currently just calls getSearchResults
         """
-        return self.getSearchResults( parsedQuery, maxResults )
+        return self.getSearchResults(parsedQuery, maxResults)
 
 
 class DeviceSearchResult(object):
