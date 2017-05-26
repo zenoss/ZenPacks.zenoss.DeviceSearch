@@ -16,6 +16,12 @@ from Products.Zuul.search import ISearchProvider
 from Products.Zuul.search import ISearchResult
 from Products.Zuul import checkPermission
 
+try:
+    from Products.Zuul.catalog.interfaces import IModelCatalogTool
+
+    USE_MODEL_CATALOG = True
+except ImportError:
+    USE_MODEL_CATALOG = False
 
 class DeviceSearchProvider(object):
     """
@@ -30,16 +36,8 @@ class DeviceSearchProvider(object):
     def getCategoryCounts(self, parsedQuery, filterFn=None):
         return self.getSearchResults(parsedQuery, countOnly=True, filterFn=filterFn)
 
-    def getSearchResults(self, parsedQuery, sorter=None, category=None, countOnly=False,
-                         unrestricted=False, filterFn=None, maxResults=None):
-        """
-        Queries the catalog.  Searches the searchKeywords index
-        using *keyword1* AND *keyword2* AND so on.
-        If there are preferred categories, find maxResults # of instances
-        before searching other categories.
-
-        @rtype generator of BrainSearchResult objects
-        """
+    def _getSearchResultsFromModelCatalog(self, parsedQuery, sorter=None, category=None, countOnly=False,
+                                          unrestricted=False, filterFn=None, maxResults=None):
         operators = parsedQuery.operators
         keywords = parsedQuery.keywords
 
@@ -51,33 +49,18 @@ class DeviceSearchProvider(object):
 
         dmd = self._dmd
 
-        try:
-            from Products.Zuul.catalog.interfaces import IModelCatalogTool
+        kw_query = Or(listMatchGlob(And, 'name', keywords),
+                      listMatchGlob(And, 'text_ipAddress', keywords))
 
-            kw_query = Or(listMatchGlob(And, 'name', keywords),
-                          listMatchGlob(And, 'text_ipAddress', keywords))
-
-            # Rank devices whose name match the query higher than other stuff
-            # TODO: Figure out how to expose Lucene boosts
-            # For now we just or the boost query in with the original query to boost those results
-            ranker = listMatchGlob(Or, 'name', keywords)
-            full_query = Or(kw_query, ranker)
-            cat = IModelCatalogTool(dmd).devices
-            # Set orderby to None so that modelindex will rank by score
-            catalogItems = cat.search(query=full_query, orderby=None, filterPermissions=True)
-            brainResults = [DeviceSearchResult(catalogItem) for catalogItem in catalogItems]
-        except ImportError:
-            kw_query = Or(listMatchGlob(And, 'titleOrId', keywords),
-                          listMatchGlob(And, 'getDeviceIp', keywords))
-
-            # Rank devices whose name match the query higher than other stuff
-            ranker = RankByQueries_Sum((listMatchGlob(Or, 'titleOrId', keywords), 10), )
-            full_query = kw_query
-            cat = dmd.Devices.deviceSearch
-            querySet = full_query
-            catalogItems = cat.evalAdvancedQuery(querySet, (ranker,))
-            brainResults = [DeviceSearchResult(catalogItem)
-                            for catalogItem in catalogItems if checkPermission("View", catalogItem.getObject())]
+        # Rank devices whose name match the query higher than other stuff
+        # TODO: Figure out how to expose Lucene boosts
+        # For now we just or the boost query in with the original query to boost those results
+        ranker = listMatchGlob(Or, 'name', keywords)
+        full_query = Or(kw_query, ranker)
+        cat = IModelCatalogTool(dmd).devices
+        # Set orderby to None so that modelindex will rank by score
+        catalogItems = cat.search(query=full_query, orderby=None, filterPermissions=True)
+        brainResults = [DeviceSearchResult(catalogItem) for catalogItem in catalogItems]
 
         if filterFn:
             brainResults = filter(filterFn, brainResults)
@@ -90,6 +73,63 @@ class DeviceSearchProvider(object):
             results = sorter.limitSort(results)
 
         return results
+
+    def _getSearchResultsFromDeviceSearchCatalog(self, parsedQuery, sorter=None, category=None, countOnly=False,
+                                          unrestricted=False, filterFn=None, maxResults=None):
+        """
+        DEPRECATED.  the DeviceSearch catalog will be replaced by the Model Catalog
+        """
+        operators = parsedQuery.operators
+        keywords = parsedQuery.keywords
+
+        if not keywords:
+            return
+
+        def listMatchGlob(op, index, list):
+            return op(*[MatchGlob(index, '*%s*' % i) for i in list])
+
+        dmd = self._dmd
+
+        kw_query = Or(listMatchGlob(And, 'titleOrId', keywords),
+                      listMatchGlob(And, 'getDeviceIp', keywords))
+
+        # Rank devices whose name match the query higher than other stuff
+        ranker = RankByQueries_Sum((listMatchGlob(Or, 'titleOrId', keywords), 10), )
+        full_query = kw_query
+        cat = dmd.Devices.deviceSearch
+        querySet = full_query
+        catalogItems = cat.evalAdvancedQuery(querySet, (ranker,))
+        brainResults = [DeviceSearchResult(catalogItem)
+                        for catalogItem in catalogItems if checkPermission("View", catalogItem.getObject())]
+
+        if filterFn:
+            brainResults = filter(filterFn, brainResults)
+
+        if countOnly:
+            return dict(Device=len(brainResults))
+        results = brainResults
+
+        if sorter is not None:
+            results = sorter.limitSort(results)
+
+        return results
+
+    def getSearchResults(self, parsedQuery, sorter=None, category=None, countOnly=False,
+                         unrestricted=False, filterFn=None, maxResults=None):
+        """
+        Queries the catalog.  Searches the searchKeywords index
+        using *keyword1* AND *keyword2* AND so on.
+        If there are preferred categories, find maxResults # of instances
+        before searching other categories.
+
+        @rtype generator of BrainSearchResult objects
+        """
+        if USE_MODEL_CATALOG:
+            return self._getSearchResultsFromModelCatalog(parsedQuery, sorter, category, countOnly, unrestricted,
+                                                          filterFn, maxResults)
+        else:
+            return self._getSearchResultsFromDeviceSearchCatalog(parsedQuery, sorter, category, countOnly, unrestricted,
+                                                          filterFn, maxResults)
 
     def getQuickSearchResults(self, parsedQuery, maxResults=None):
         """
