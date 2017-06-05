@@ -58,9 +58,13 @@ class DeviceSearchProvider(object):
         ranker = listMatchGlob(Or, 'name', keywords)
         full_query = Or(kw_query, ranker)
         cat = IModelCatalogTool(dmd).devices
+        limit = 0 if countOnly and not filterFn else maxResults
         # Set orderby to None so that modelindex will rank by score
-        catalogItems = cat.search(query=full_query, orderby=None, filterPermissions=True)
+        catalogItems = cat.search(query=full_query, orderby=None, filterPermissions=True, limit=limit)
         brainResults = [DeviceSearchResult(catalogItem) for catalogItem in catalogItems]
+
+        if countOnly and not filterFn:
+            return dict(Device=brainResults.total)
 
         if filterFn:
             brainResults = filter(filterFn, brainResults)
